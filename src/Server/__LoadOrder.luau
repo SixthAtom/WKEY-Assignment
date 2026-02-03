@@ -4,10 +4,12 @@ local ServerStorage = game:GetService("ServerStorage")
 -- CONSTANTS
 -------------------------------------------------------------------------------
 
-local SERVER = ServerStorage.Server
+local SERVICES = ServerStorage.Server.Services
 
 -------------------------------------------------------------------------------
 -- RETURN
 -------------------------------------------------------------------------------
 
-return {} :: { ModuleScript }
+return {
+	SERVICES.ConveyorService,
+} :: { ModuleScript }
