@@ -42,6 +42,8 @@ local bagRemoteFunction = SimpleRemotes.getFunction("Bag")
 local world = Worlds.Default
 local components = Components.Default
 
+local camera = workspace.CurrentCamera
+
 -------------------------------------------------------------------------------
 -- PRIVATE FUNCTIONS
 -------------------------------------------------------------------------------
@@ -124,6 +126,10 @@ RunService.RenderStepped:Connect(function()
 		local elapsed, duration = serverTimeNow - startTime, finishTime - startTime
 		local progress = math.clamp(elapsed / duration, 0, 1)
 		local position = startPosition:Lerp(finishPosition, progress)
+
+		if not ({ camera:WorldToViewportPoint(position) })[2] then
+			continue -- CONTINUE: Model is not in camera's FOV
+		end
 
 		table.insert(cframeList, model:GetPivot().Rotation + position)
 		table.insert(partsList, model.PrimaryPart)
