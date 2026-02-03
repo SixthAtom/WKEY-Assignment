@@ -14,6 +14,7 @@ return {
 	Bags = {
 		Events = {
 			Spawn = 1,
+			Clicked = 2,
 		},
 
 		Functions = {

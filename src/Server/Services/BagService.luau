@@ -88,6 +88,22 @@ end
 -- LOGIC
 -------------------------------------------------------------------------------
 
+-- Listen for remotes
+SimpleRemotesUtil.bindRemoteEventActions(bagRemoteEvent, {
+	[REMOTE_CODES.Events.Clicked] = function(player: Player, b: buffer)
+		local offset = 0
+		local bagId: number
+		bagId, offset = BufferUtil.readu16(b, offset)
+
+		for bagEntity, _bagId in world:query(components.Id):with(components.BagTag) do
+			if _bagId == bagId then
+				warn(`{player.Name} just clicked bag {bagId} | server EntityID: {bagEntity}`)
+				break
+			end
+		end
+	end,
+}, SimpleRemotesUtil.DecodeActionBuffer)
+
 SimpleRemotesUtil.bindRemoteFunctionActions(bagRemoteFunction, {
 	[REMOTE_CODES.Functions.Get] = function(player: Player)
 		if Limiter.isDebouncing(`GetBags.{player.UserId}`, 10) then

@@ -73,7 +73,24 @@ end
 
 local function spawnBagEntity(data: BagEntityData)
 	local material = Enum.Material:FromValue(data.MaterialId) :: Enum.Material
-	Bag.new(data.Id, material, data.Color, data.ConveyorId, data.StartTime, data.FinishTime)
+	local bagEntity = Bag.new(data.Id, material, data.Color, data.ConveyorId, data.StartTime, data.FinishTime)
+
+	local bagModel = world:get(bagEntity, components.Model)
+
+	-- Create click detector
+	local clickDetector = Instance.new("ClickDetector")
+	clickDetector.Parent = bagModel.PrimaryPart
+	clickDetector.MouseClick:Connect(function()
+		local bagId = world:get(bagEntity, components.Id)
+		-- Print ID on client
+		warn(`You just clicked bag {bagId} | client EntityID: {bagEntity}`)
+
+		-- Replicate click to server
+		local b, offset = buffer.create(BYTE_SIZES.u8 + BYTE_SIZES.u16), 0
+		offset = BufferUtil.writeu8(b, offset, REMOTE_CODES.Events.Clicked)
+		offset = BufferUtil.writeu16(b, offset, bagId)
+		bagRemoteEvent:FireServer(b)
+	end)
 end
 
 -------------------------------------------------------------------------------
@@ -83,7 +100,7 @@ end
 function BagController.start()
 	-- Invoke server & get existing bags
 	local b, offset = buffer.create(BYTE_SIZES.u8), 0
-	BufferUtil.writeu8(b, offset, REMOTE_CODES.Functions.Get)
+	BufferUtil.writeu8(b, offset, REMOTE_CODES.Functions.Get) -- don't set offset because we're resetting the buffer variable
 	b = bagRemoteFunction:InvokeServer(b)
 
 	-- Process first input
@@ -127,6 +144,12 @@ RunService.RenderStepped:Connect(function()
 		local elapsed, duration = serverTimeNow - startTime, finishTime - startTime
 		local progress = math.clamp(elapsed / duration, 0, 1)
 		local position = startPosition:Lerp(finishPosition, progress)
+
+		if progress >= 1 then
+			model:Destroy()
+			world:delete(bagEntity)
+			continue -- CONTINUE: Model is DONE FOR
+		end
 
 		if not ({ camera:WorldToViewportPoint(position) })[2] then
 			continue -- CONTINUE: Model is not in camera's FOV
