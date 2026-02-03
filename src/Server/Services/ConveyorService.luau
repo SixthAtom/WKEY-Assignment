@@ -15,6 +15,7 @@ local SimpleRemotesUtil = require(ReplicatedStorage.Shared.Networking.SimpleRemo
 local BufferUtil = require(ReplicatedStorage.Shared.Util.BufferUtil)
 local PlayersUtil = require(ReplicatedStorage.Shared.Util.PlayersUtil)
 local Conveyor = require(ServerStorage.Server.ECS.Entities.Conveyor)
+local BagService = require(ServerStorage.Server.Services.BagService)
 
 -------------------------------------------------------------------------------
 -- CONSTANTS
@@ -84,7 +85,12 @@ function ConveyorService.init()
 	-- Create server conveyor entities
 	for _, conveyorModel: Model in next, workspace.Conveyors:GetChildren() do
 		conveyorCounter = (conveyorCounter % 10_000) + 1
-		Conveyor.new(conveyorCounter, conveyorModel, spawnInterval)
+
+		local conveyorEntity = Conveyor.new(conveyorCounter, conveyorModel, spawnInterval)
+		conveyorModel.Name = tostring(conveyorCounter)
+
+		-- Set attributes (for easy client access)
+		conveyorModel:SetAttribute("Speed", world:get(conveyorEntity, components.Speed))
 	end
 end
 
@@ -103,9 +109,11 @@ RunService.Heartbeat:Connect(function()
 	local timeNow = os.clock()
 	for conveyorEntity, nextSpawnAt, spawnInterval in getConveyors do
 		if timeNow < nextSpawnAt then
-			continue
+			continue -- CONTINUE: Not yet refreshing
 		end
+
 		world:set(conveyorEntity, components.NextSpawnAt, timeNow + spawnInterval)
+		BagService.spawn(conveyorEntity)
 	end
 end)
 
@@ -119,7 +127,7 @@ SimpleRemotesUtil.bindRemoteEventActions(conveyorRemoteEvent, {
 		local offset = 0
 		local newInterval: number
 
-		newInterval = BufferUtil.readu16(b, offset)
+		newInterval = BufferUtil.readf32(b, offset)
 
 		ConveyorService.setInterval(newInterval)
 	end,

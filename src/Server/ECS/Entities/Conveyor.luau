@@ -28,7 +28,7 @@ function Conveyor.new(id: number, model: Model, spawnInterval: number)
 	ECSUtil.bulkSet(world, conveyorEntity, {
 		[components.Id] = id,
 		[components.Model] = model,
-		[components.Speed] = 10,
+		[components.Speed] = 1,
 		[components.Interval] = spawnInterval,
 		[components.NextSpawnAt] = 0,
 	})

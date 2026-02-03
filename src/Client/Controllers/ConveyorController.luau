@@ -72,9 +72,9 @@ function ConveyorController.init()
 			return
 		end
 
-		local b, offset = buffer.create(BYTE_SIZES.u8 + BYTE_SIZES.u16), 0
+		local b, offset = buffer.create(BYTE_SIZES.u8 + BYTE_SIZES.f32), 0
 		offset = BufferUtil.writeu8(b, offset, REMOTE_CODES.Events.SetInterval)
-		offset = BufferUtil.writeu16(b, offset, input)
+		offset = BufferUtil.writef32(b, offset, input)
 
 		conveyorRemoteEvent:FireServer(b)
 	end)

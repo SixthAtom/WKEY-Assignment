@@ -10,4 +10,14 @@ return {
 			SetInterval = 1,
 		},
 	},
+
+	Bags = {
+		Events = {
+			Spawn = 1,
+		},
+
+		Functions = {
+			Get = 1,
+		},
+	},
 }

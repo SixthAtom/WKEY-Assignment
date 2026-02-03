@@ -3,6 +3,7 @@ local SimpleRemotesUtil = {}
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Promise = require(ReplicatedStorage.Shared.Promise)
+local BufferUtil = require(ReplicatedStorage.Shared.Util.BufferUtil)
 
 local IS_SERVER = RunService:IsServer()
 
@@ -31,6 +32,15 @@ local function ActionsExecutor(actions: FunctionActions | Actions, action: Actio
 	else
 		warn("Action", action, "was not present in", actions)
 	end
+end
+
+-------------------------------------------------------------------------------
+-- PUBLIC VARIABLES
+-------------------------------------------------------------------------------
+
+SimpleRemotesUtil.DecodeActionBuffer = function(b: buffer)
+	local remoteCode, offset = BufferUtil.readu8(b, 0)
+	return remoteCode, BufferUtil.deallocate(b, 0, offset)
 end
 
 -------------------------------------------------------------------------------

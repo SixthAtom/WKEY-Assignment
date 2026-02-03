@@ -9,4 +9,7 @@ local CONTROLLERS = ReplicatedStorage.Client.Controllers
 -- RETURN
 -------------------------------------------------------------------------------
 
-return { CONTROLLERS.ConveyorController } :: { ModuleScript }
+return {
+	CONTROLLERS.ConveyorController,
+	CONTROLLERS.BagController,
+} :: { ModuleScript }
