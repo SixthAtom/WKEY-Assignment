@@ -1,0 +1,9 @@
+[package]
+name = "larsb/jecs-game-template"
+version = "1.0.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+authors = ["SixthAtom / Lars B."]
+
+[dependencies]
+jecs = "ukendio/jecs@0.9.0"
