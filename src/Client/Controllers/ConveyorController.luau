@@ -7,7 +7,6 @@ local BufferConstants = require(ReplicatedStorage.Shared.Constants.BufferConstan
 local ConveyorConstants = require(ReplicatedStorage.Shared.Constants.ConveyorConstants)
 local RemoteCodes = require(ReplicatedStorage.Shared.Networking.RemoteCodes)
 local SimpleRemotes = require(ReplicatedStorage.Shared.Networking.SimpleRemotes)
-local SimpleRemotesUtil = require(ReplicatedStorage.Shared.Networking.SimpleRemotesUtil)
 local BufferUtil = require(ReplicatedStorage.Shared.Util.BufferUtil)
 
 -------------------------------------------------------------------------------

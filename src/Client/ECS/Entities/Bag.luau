@@ -1,6 +1,5 @@
 local Bag = {}
 
-local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Components = require(ReplicatedStorage.Client.ECS.Components)

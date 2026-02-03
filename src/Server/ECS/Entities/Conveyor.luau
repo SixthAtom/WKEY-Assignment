@@ -18,7 +18,7 @@ local components = Components.Default
 -- PUBLIC FUNCTIONS
 -------------------------------------------------------------------------------
 
-function Conveyor.new(id: number, model: Model, spawnInterval: number)
+function Conveyor.new(id: number, model: Model, spawnInterval: number, speed: number)
 	local conveyorEntity = world:entity()
 
 	-------------------------------------------------------------------------------
@@ -28,7 +28,7 @@ function Conveyor.new(id: number, model: Model, spawnInterval: number)
 	ECSUtil.bulkSet(world, conveyorEntity, {
 		[components.Id] = id,
 		[components.Model] = model,
-		[components.Speed] = 1,
+		[components.Speed] = speed,
 		[components.Interval] = spawnInterval,
 		[components.NextSpawnAt] = 0,
 	})

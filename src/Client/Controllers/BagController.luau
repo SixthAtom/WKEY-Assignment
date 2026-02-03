@@ -48,7 +48,8 @@ local camera = workspace.CurrentCamera
 -- PRIVATE FUNCTIONS
 -------------------------------------------------------------------------------
 
-local function decodeBuffer(b: buffer, offset: number)
+-- Method for decoding bag buffers -> following the DRY principle
+local function decodeBagBuffer(b: buffer, offset: number)
 	local id: number, materialId: number, color: Color3, conveyorId: number
 	local startTime: number, finishTime: number
 
@@ -91,7 +92,7 @@ function BagController.start()
 
 	for i = 1, len do
 		local decoded
-		decoded, offset = decodeBuffer(b, offset)
+		decoded, offset = decodeBagBuffer(b, offset)
 		spawnBagEntity(decoded)
 	end
 end
@@ -142,7 +143,7 @@ end)
 -- Listen for remotes
 SimpleRemotesUtil.bindRemoteEventActions(bagRemoteEvent, {
 	[REMOTE_CODES.Events.Spawn] = function(b: buffer)
-		spawnBagEntity(decodeBuffer(b, 0))
+		spawnBagEntity(decodeBagBuffer(b, 0))
 	end,
 }, SimpleRemotesUtil.DecodeActionBuffer)
 

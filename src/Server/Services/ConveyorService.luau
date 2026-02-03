@@ -5,7 +5,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ServerStorage = game:GetService("ServerStorage")
 
-local BufferConstants = require(ReplicatedStorage.Shared.Constants.BufferConstants)
 local ConveyorConstants = require(ReplicatedStorage.Shared.Constants.ConveyorConstants)
 local Components = require(ServerStorage.Server.ECS.Components)
 local Worlds = require(ReplicatedStorage.Shared.ECS.Worlds)
@@ -23,9 +22,9 @@ local BagService = require(ServerStorage.Server.Services.BagService)
 
 local REMOTE_CODES = RemoteCodes.Conveyor
 local INTERVAL_RATES = ConveyorConstants.IntervalRates
-local BYTE_SIZES = BufferConstants.Sizes
 
 local DEFAULT_SPAWN_INTERVAL = 1
+local DEFAULT_CONVEYOR_SPEED = 5
 
 -------------------------------------------------------------------------------
 -- PRIVATE VARIABLES
@@ -34,6 +33,8 @@ local DEFAULT_SPAWN_INTERVAL = 1
 local conveyorRemoteEvent = SimpleRemotes.getEvent("Conveyor")
 
 local spawnInterval = DEFAULT_SPAWN_INTERVAL
+local conveyorSpeed = DEFAULT_CONVEYOR_SPEED
+
 local conveyorCounter = 0
 
 local world = Worlds.Default
@@ -86,7 +87,7 @@ function ConveyorService.init()
 	for _, conveyorModel: Model in next, workspace.Conveyors:GetChildren() do
 		conveyorCounter = (conveyorCounter % 10_000) + 1
 
-		local conveyorEntity = Conveyor.new(conveyorCounter, conveyorModel, spawnInterval)
+		local conveyorEntity = Conveyor.new(conveyorCounter, conveyorModel, spawnInterval, conveyorSpeed)
 		conveyorModel.Name = tostring(conveyorCounter)
 
 		-- Set attributes (for easy client access)

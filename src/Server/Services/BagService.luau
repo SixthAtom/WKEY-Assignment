@@ -36,6 +36,32 @@ local world = Worlds.Default
 local components = Components.Default
 
 -------------------------------------------------------------------------------
+-- PRIVATE FUNCTIONS
+-------------------------------------------------------------------------------
+
+-- Method for encoding bag buffers -> following the DRY principle
+local function encodeBagBuffer(
+	b: buffer,
+	offset: number,
+	data: {
+		Id: number,
+		MaterialId: number,
+		Color: Color3,
+		ConveyorId: number,
+		StartTime: number,
+		FinishTime: number,
+	}
+)
+	offset = BufferUtil.writeu16(b, offset, data.Id)
+	offset = BufferUtil.writeu16(b, offset, data.MaterialId)
+	offset = BufferUtil.writeColor_24(b, offset, data.Color)
+	offset = BufferUtil.writeu8(b, offset, data.ConveyorId)
+	offset = BufferUtil.writef64(b, offset, data.StartTime)
+	offset = BufferUtil.writef64(b, offset, data.FinishTime)
+	return offset
+end
+
+-------------------------------------------------------------------------------
 -- PUBLIC FUNCTIONS
 -------------------------------------------------------------------------------
 
@@ -46,12 +72,14 @@ function BagService.spawn(conveyorEntity: jecs.Entity)
 
 	local b, offset = buffer.create(BYTE_SIZES.u8 + BAG_BYTE_SIZE), 0
 	offset = BufferUtil.writeu8(b, offset, REMOTE_CODES.Events.Spawn)
-	offset = BufferUtil.writeu16(b, offset, bagCounter)
-	offset = BufferUtil.writeu16(b, offset, world:get(bagEntity, components.MaterialId))
-	offset = BufferUtil.writeColor_24(b, offset, world:get(bagEntity, components.Color))
-	offset = BufferUtil.writeu8(b, offset, world:get(bagEntity, components.LinkedToId))
-	offset = BufferUtil.writef64(b, offset, world:get(bagEntity, components.StartedAt))
-	offset = BufferUtil.writef64(b, offset, world:get(bagEntity, components.FinishesAt))
+	offset = encodeBagBuffer(b, offset, {
+		Id = bagCounter,
+		MaterialId = world:get(bagEntity, components.MaterialId),
+		Color = world:get(bagEntity, components.Color),
+		ConveyorId = world:get(bagEntity, components.LinkedToId),
+		StartTime = world:get(bagEntity, components.StartedAt),
+		FinishTime = world:get(bagEntity, components.FinishesAt),
+	})
 
 	bagRemoteEvent:FireAllClients(b)
 end
@@ -99,12 +127,14 @@ SimpleRemotesUtil.bindRemoteFunctionActions(bagRemoteFunction, {
 		offset = BufferUtil.writeu16(b, offset, len)
 		for i = 1, #bagDataList do
 			local v = bagDataList[i]
-			offset = BufferUtil.writeu16(b, offset, v[1])
-			offset = BufferUtil.writeu16(b, offset, v[2])
-			offset = BufferUtil.writeColor_24(b, offset, v[3])
-			offset = BufferUtil.writeu8(b, offset, v[4])
-			offset = BufferUtil.writef64(b, offset, v[5])
-			offset = BufferUtil.writef64(b, offset, v[6])
+			offset = encodeBagBuffer(b, offset, {
+				Id = v[1],
+				MaterialId = v[2],
+				Color = v[3],
+				ConveyorId = v[4],
+				StartTime = v[5],
+				FinishTime = v[6],
+			})
 		end
 
 		return b
