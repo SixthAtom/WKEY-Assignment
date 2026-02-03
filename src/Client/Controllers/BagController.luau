@@ -32,6 +32,13 @@ type BagEntityData = {
 local REMOTE_CODES = RemoteCodes.Bags
 local BYTE_SIZES = BufferConstants.Sizes
 
+local DISTANCE_STEPS = {
+	[100] = 3,
+	[200] = 5,
+	[300] = 7,
+	[600] = 15,
+}
+
 -------------------------------------------------------------------------------
 -- PRIVATE VARIABLES
 -------------------------------------------------------------------------------
@@ -47,6 +54,17 @@ local camera = workspace.CurrentCamera
 -------------------------------------------------------------------------------
 -- PRIVATE FUNCTIONS
 -------------------------------------------------------------------------------
+
+local function getStepFromDistance(distance: number)
+	local step = 1
+	for treshold, s in DISTANCE_STEPS do
+		if distance > treshold then
+			step = s
+			break
+		end
+	end
+	return step
+end
 
 -- Method for decoding bag buffers -> following the DRY principle
 local function decodeBagBuffer(b: buffer, offset: number)
@@ -118,8 +136,28 @@ end
 -- LOGIC
 -------------------------------------------------------------------------------
 
--- Bag rendering
+-- Bag rendering & throttling
+local conveyorsStep: { number } = {}
+local frames = 0
+
 RunService.RenderStepped:Connect(function()
+	frames = (frames + 1) % 10_000
+
+	-- Prepare variables
+	local partsList: { BasePart }, cframeList: { CFrame } = {}, {}
+	local serverTimeNow = workspace:GetServerTimeNow()
+	local cameraPosition = camera.CFrame.Position
+
+	-- Calculate distances
+	for _, conveyor in workspace.Conveyors:GetChildren() :: { Model } do
+		local root = conveyor.PrimaryPart
+		if not root then
+			continue
+		end
+
+		conveyorsStep[tonumber(conveyor.Name)] = getStepFromDistance((cameraPosition - root.Position).Magnitude)
+	end
+
 	-- Construct query, no caching because it tends to break.
 	local getAllBags = world
 		:query(
@@ -127,16 +165,15 @@ RunService.RenderStepped:Connect(function()
 			components.StartedAt,
 			components.FinishesAt,
 			components.StartPosition,
-			components.FinishPosition
+			components.FinishPosition,
+			components.LinkedToId
 		)
 		:with(components.BagTag)
 
-	-- Prepare variables
-	local partsList: { BasePart }, cframeList: { CFrame } = {}, {}
-	local serverTimeNow = workspace:GetServerTimeNow()
+	-- Loop through query
+	local bagEntitiesToDelete = {}
 
-	-- Loop
-	for bagEntity, model, startTime, finishTime, startPosition, finishPosition in getAllBags do
+	for bagEntity, model, startTime, finishTime, startPosition, finishPosition, conveyorId in getAllBags do
 		if not model.PrimaryPart then
 			continue
 		end
@@ -147,8 +184,12 @@ RunService.RenderStepped:Connect(function()
 
 		if progress >= 1 then
 			model:Destroy()
-			world:delete(bagEntity)
+			table.insert(bagEntitiesToDelete, bagEntity)
 			continue -- CONTINUE: Model is DONE FOR
+		end
+
+		if frames % conveyorsStep[conveyorId] ~= 0 then
+			continue -- CONTINUE: Throttled
 		end
 
 		if not ({ camera:WorldToViewportPoint(position) })[2] then
@@ -159,8 +200,13 @@ RunService.RenderStepped:Connect(function()
 		table.insert(partsList, model.PrimaryPart)
 	end
 
-	-- Move
-	workspace:BulkMoveTo(partsList, cframeList)
+	if #partsList > 0 then
+		workspace:BulkMoveTo(partsList, cframeList) -- Use BulkMoveTo because it's written in C++ -> more performant over manual CFrame operations.
+	end
+
+	for _, bagEntity in next, bagEntitiesToDelete do
+		world:delete(bagEntity)
+	end
 end)
 
 -- Listen for remotes

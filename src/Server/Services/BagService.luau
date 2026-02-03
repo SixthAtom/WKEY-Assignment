@@ -1,6 +1,7 @@
 local BagService = {}
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local ServerStorage = game:GetService("ServerStorage")
 
 local Components = require(ServerStorage.Server.ECS.Components)
@@ -122,9 +123,15 @@ SimpleRemotesUtil.bindRemoteFunctionActions(bagRemoteFunction, {
 			)
 			:with(components.BagTag)
 
-		-- Collect all bags
+		-- Collect all valid bags
+		local serverTimeNow = workspace:GetServerTimeNow()
+
 		local bagDataList = {}
 		for _, id, materialId, color, conveyorId, startTime, finishTime in getAllBags do
+			if serverTimeNow > finishTime then
+				continue
+			end
+
 			table.insert(bagDataList, {
 				id,
 				materialId,
@@ -156,5 +163,28 @@ SimpleRemotesUtil.bindRemoteFunctionActions(bagRemoteFunction, {
 		return b
 	end,
 }, SimpleRemotesUtil.DecodeActionBuffer)
+
+-- Clean up the world
+local nextCleanup = 0
+RunService.Heartbeat:Connect(function()
+	local timeNow = os.clock()
+	if timeNow < nextCleanup then
+		return
+	end
+	nextCleanup = timeNow + math.random(10, 30) / 100
+
+	local serverTimeNow = workspace:GetServerTimeNow()
+	local bagsToDelete = {}
+
+	for bagEntity, finishTime in world:query(components.FinishesAt):with(components.BagTag) do
+		if serverTimeNow >= finishTime then
+			table.insert(bagsToDelete, bagEntity)
+		end
+	end
+
+	for _, bagEntity in bagsToDelete do
+		world:delete(bagEntity)
+	end
+end)
 
 return BagService
