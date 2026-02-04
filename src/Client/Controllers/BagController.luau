@@ -38,6 +38,10 @@ local BYTE_SIZES = BufferConstants.Sizes
 -- Small window so the effect is subtle and not distracting
 local ANIM_TRANSITION_WINDOW = 0.05
 
+-- At which point {-1, 1} the bags should stop being visually rendered
+-- helps with performance when there's loads of bags
+local DOT_FREEZE_TRESHOLD = 0.3
+
 -- Frame throttling steps based on distance from camera
 -- Further conveyors update bags less often to save performance
 local DISTANCE_STEPS = {
@@ -190,7 +194,7 @@ do -- Rendering and throttling
 
 		local partsList: { BasePart }, cframeList: { CFrame } = {}, {}
 		local serverTimeNow = workspace:GetServerTimeNow()
-		local cameraPosition = camera.CFrame.Position
+		local cameraPosition, cameraLook = camera.CFrame.Position, camera.CFrame.LookVector
 
 		-- Compute throttling values per conveyor every frame
 		-- Much cheaper than doing distance checks per bag
@@ -254,12 +258,13 @@ do -- Rendering and throttling
 				continue
 			end
 
-			-- CONTINUE: Bag is outside of camera's view
-			if not ({ camera:WorldToViewportPoint(position) })[2] then
+			-- CONTINUE: Camera is not pointing toward bag
+			local direction = (position - cameraPosition).Unit
+			if cameraLook:Dot(direction) < DOT_FREEZE_TRESHOLD then
 				continue
 			end
 
-			-- Insert into the bulkmoveto tables
+			-- Insert into the BulkMoveTo tables for visual rendering
 			table.insert(cframeList, model:GetPivot().Rotation + position)
 			table.insert(partsList, model.PrimaryPart)
 		end
