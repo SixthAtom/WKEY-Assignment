@@ -3,10 +3,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 -- CONSTANTS
 -------------------------------------------------------------------------------
 
-local CLIENT = ReplicatedStorage.Client
+local CONTROLLERS = ReplicatedStorage.Client.Controllers
 
 -------------------------------------------------------------------------------
 -- RETURN
 -------------------------------------------------------------------------------
 
-return {} :: { ModuleScript }
+return {
+	CONTROLLERS.ConveyorController,
+	CONTROLLERS.BagController,
+} :: { ModuleScript }
