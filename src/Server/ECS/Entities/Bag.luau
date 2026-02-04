@@ -35,16 +35,21 @@ function Bag.new(id: number, conveyorEntity: jecs.Entity)
 	-------------------------------------------------------------------------------
 
 	local conveyorModel = world:get(conveyorEntity, components.Model)
+
+	-- Length is extracted from the Z-axis of the PrrimaryPart to ensure an accurate duration
 	local conveyorLength = conveyorModel.PrimaryPart.Size.Z
 	local conveyorSpeed = world:get(conveyorEntity, components.Speed)
 	local serverTimeNow = workspace:GetServerTimeNow()
 
+	-- Randomized selection from the constants table
+	-- this table provides materials that can be applied to parts
 	local materialId = MATERIALS[math.random(#MATERIALS)].Value
 
 	-------------------------------------------------------------------------------
 	-- COMPONENTS
 	-------------------------------------------------------------------------------
 
+	-- BulkSet is used for setting components to an entity quickly
 	ECSUtil.bulkSet(world, bagEntity, {
 		[components.Id] = id,
 		[components.MaterialId] = materialId,
@@ -54,6 +59,7 @@ function Bag.new(id: number, conveyorEntity: jecs.Entity)
 		[components.FinishesAt] = serverTimeNow + conveyorLength / conveyorSpeed,
 	})
 
+	-- Marks the entity as a bag to easily query for bags only
 	world:add(bagEntity, Tags.IsBag)
 
 	return bagEntity

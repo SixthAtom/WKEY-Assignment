@@ -31,8 +31,13 @@ local conveyorRemoteEvent = SimpleRemotes.getEvent("Conveyor")
 -- PRIVATE FUNCTIONS
 -------------------------------------------------------------------------------
 
+-- Updates the controlUI to match current game state
+-- Called whenever ownership or interval attributes change
 local function updateControlScreen()
+	-- Visibility is determined by a player attribute set by the server
 	local visible = player:GetAttribute("ConveyorsOwner") == true
+
+	-- Interval is stored in ReplicatedStorage for easy access
 	local intervalAmount = ReplicatedStorage:GetAttribute("ConveyorInterval")
 
 	controlScreen.Enabled = visible
@@ -45,17 +50,17 @@ end
 
 function ConveyorController.init()
 	controlScreen.Enabled = false -- Disabled by default
-	updateControlScreen()
+	updateControlScreen() -- Initialize so screen is in sync
 
-	-- Load control screen
+	-- Load the screen regardless of it's visibility
 	local submitButton = controlScreen.Frame.Submit
 	local intervalTextBox = controlScreen.Frame.TextBox
 
 	submitButton.MouseButton1Click:Connect(function()
 		local input = intervalTextBox.Text
-		intervalTextBox.Text = ""
+		intervalTextBox.Text = "" -- Clear textbox immediately so player gets instant feedback
 
-		input = tonumber(input)
+		input = tonumber(input) -- convert to number and verify it actually is numeric
 		if not input then
 			warn("Not a number")
 			return
@@ -71,6 +76,7 @@ function ConveyorController.init()
 			return
 		end
 
+		-- Pack into a buffer to keep network payload small and consistent with the rest of my networking code
 		local b, offset = buffer.create(BYTE_SIZES.u8 + BYTE_SIZES.f32), 0
 		offset = BufferUtil.writeu8(b, offset, REMOTE_CODES.Events.SetInterval)
 		offset = BufferUtil.writef32(b, offset, input)
@@ -83,7 +89,8 @@ end
 -- LOGIC
 -------------------------------------------------------------------------------
 
--- Connect control screen update events
+-- UI reacts to attribute changes instead of polling values
+-- This ensures an instant update with no manual refresh logic
 ReplicatedStorage:GetAttributeChangedSignal("ConveyorInterval"):Connect(updateControlScreen)
 player:GetAttributeChangedSignal("ConveyorsOwner"):Connect(updateControlScreen)
 

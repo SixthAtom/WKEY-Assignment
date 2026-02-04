@@ -3,10 +3,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Worlds = require(ReplicatedStorage.Shared.ECS.Worlds)
 
 -------------------------------------------------------------------------------
--- CONSTANTS
+-- PRIVATE VARIABLES
 -------------------------------------------------------------------------------
 
-local WORLD = Worlds.Default
+local world = Worlds.Default
 
 -------------------------------------------------------------------------------
 -- RETURN

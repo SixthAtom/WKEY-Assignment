@@ -26,6 +26,7 @@ function Conveyor.new(id: number, model: Model, spawnInterval: number, speed: nu
 	-- COMPONENTS
 	-------------------------------------------------------------------------------
 
+	-- BulkSet is used for setting components to an entity quickly
 	ECSUtil.bulkSet(world, conveyorEntity, {
 		[components.Id] = id,
 		[components.Model] = model,
@@ -34,6 +35,7 @@ function Conveyor.new(id: number, model: Model, spawnInterval: number, speed: nu
 		[components.NextSpawnAt] = 0,
 	})
 
+	-- Marks the entity as a conveyor to easily query for bags only
 	world:add(conveyorEntity, Tags.IsConveyor)
 
 	return conveyorEntity

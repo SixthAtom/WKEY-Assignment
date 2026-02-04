@@ -20,7 +20,6 @@ local world = Worlds.Default
 -------------------------------------------------------------------------------
 
 return {
-	-- Components
 	Interval = world:component() :: Id<number>,
 	NextSpawnAt = world:component() :: Id<number>,
 }

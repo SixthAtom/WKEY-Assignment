@@ -34,8 +34,12 @@ type BagEntityData = {
 local REMOTE_CODES = RemoteCodes.Bags
 local BYTE_SIZES = BufferConstants.Sizes
 
+-- How long bags take to fade in/out at start and end
+-- Small window so the effect is subtle and not distracting
 local ANIM_TRANSITION_WINDOW = 0.05
 
+-- Frame throttling steps based on distance from camera
+-- Further conveyors update bags less often to save performance
 local DISTANCE_STEPS = {
 	[100] = 3,
 	[200] = 5,
@@ -59,7 +63,8 @@ local camera = workspace.CurrentCamera
 -- PRIVATE FUNCTIONS
 -------------------------------------------------------------------------------
 
--- Converts distance into a usable step index
+-- Returns how often a conveyor should update it's bags based on distance
+-- Uses a simple lookup instead of math to keep it predictable and cheap
 local function getStepFromDistance(distance: number)
 	local step = 1
 	for treshold, s in DISTANCE_STEPS do
@@ -71,6 +76,8 @@ local function getStepFromDistance(distance: number)
 	return step
 end
 
+-- Finds an already existing bag entity with a given unique id -> this is replicated
+-- Linear scan but cheap because bag count isn't substantially high
 local function getBagEntityFromId(id: number)
 	for bagEntity, _id in world:query(components.Id, Tags.IsBag) do
 		if _id == id then
@@ -80,7 +87,8 @@ local function getBagEntityFromId(id: number)
 	return nil
 end
 
--- Method for decoding bag buffers -> following the DRY principle
+-- Decodes a bag buffer into a proper table
+-- Centralizing this prevents offset mistakes all over the code
 local function decodeBagBuffer(b: buffer, offset: number)
 	local id: number, materialId: number, color: Color3, conveyorId: number
 	local startTime: number, finishTime: number
@@ -103,15 +111,16 @@ local function decodeBagBuffer(b: buffer, offset: number)
 		offset
 end
 
--- Spawns a bag entity on the client if it does not already exist
+-- Creates an ECS entity for a bag
+-- Only runs if the bag is still relevant and not already spawned
 local function spawnBagEntity(data: BagEntityData)
 	local serverTimeNow = workspace:GetServerTimeNow()
 	if serverTimeNow > data.FinishTime then
-		return -- RETURN: Already finished when arrived
+		return -- RETURN: Dont bother creating bags that already finished
 	end
 
 	if getBagEntityFromId(data.Id) then
-		return -- RETURN: Bag already exists on the client
+		return -- RETURN: Avoid duplicates (especially when getting & receiving on join)
 	end
 
 	local material = Enum.Material:FromValue(data.MaterialId) :: Enum.Material
@@ -119,17 +128,17 @@ local function spawnBagEntity(data: BagEntityData)
 
 	warn(`LID: {data.Id} | WEID: {bagEntity} | LEID: {jecs.ECS_ID(bagEntity)} | GID: {jecs.ECS_GENERATION(bagEntity)}`)
 
-	-- Create click detector
+	-- Interaction logic is attached at spawn so it dies with the entity
 	local bagModel = world:get(bagEntity, components.Model)
 
 	local clickDetector = Instance.new("ClickDetector")
 	clickDetector.Parent = bagModel.PrimaryPart
 	clickDetector.MouseClick:Connect(function()
 		local bagId = world:get(bagEntity, components.Id)
-		-- Print ID on client
+
 		warn(`You just clicked bag {bagId} | client EntityID: {bagEntity}`)
 
-		-- Replicate click to server
+		-- Pack data into buffer and tell server which bag was clicked
 		local b, offset = buffer.create(BYTE_SIZES.u8 + BYTE_SIZES.u16), 0
 		offset = BufferUtil.writeu8(b, offset, REMOTE_CODES.Events.Clicked)
 		offset = BufferUtil.writeu16(b, offset, bagId)
@@ -142,18 +151,19 @@ end
 -------------------------------------------------------------------------------
 
 function BagController.init()
-	-- Invoke server & get existing bags
+	-- Ask server for active bags on join
 	local b, offset = buffer.create(BYTE_SIZES.u8), 0
-	BufferUtil.writeu8(b, offset, REMOTE_CODES.Functions.Get) -- don't set offset because we're resetting the buffer variable
+	BufferUtil.writeu8(b, offset, REMOTE_CODES.Functions.Get)
 	b = bagRemoteFunction:InvokeServer(b)
 
-	-- Process first input
+	-- First value in buffer tells us how many bags to read
 	local len: number
 	len, offset = BufferUtil.readu16(b, offset)
 
 	for i = 1, len do
 		local decoded
 		decoded, offset = decodeBagBuffer(b, offset)
+
 		spawnBagEntity(decoded)
 	end
 end
@@ -162,15 +172,17 @@ end
 -- LOGIC
 -------------------------------------------------------------------------------
 
--- Listen for remotes
+-- Binds remote actions in a table, so adding new events later is easy
 SimpleRemotesUtil.bindRemoteEventActions(bagRemoteEvent, {
 	[REMOTE_CODES.Events.Spawn] = function(b: buffer)
 		spawnBagEntity(decodeBagBuffer(b, 0))
 	end,
 }, SimpleRemotesUtil.DecodeActionBuffer)
 
-do -- Bag rendering & throttling
+do -- Rendering and throttling
+	-- Caching ECS queries give a very big performance boost (about 5x as fast as non-cached)
 	local getAllBags = world:query(components.FinishesAt):with(Tags.IsBag):cached()
+	local getBagsToDestroy = world:query(components.Model, Tags.ToDestroy):with(Tags.IsBag):cached()
 
 	local conveyorsStep: { number } = {}
 	local frames = 0
@@ -178,12 +190,12 @@ do -- Bag rendering & throttling
 	RunService.RenderStepped:Connect(function()
 		frames = (frames + 1) % 10_000
 
-		-- Prepare variables
 		local partsList: { BasePart }, cframeList: { CFrame } = {}, {}
 		local serverTimeNow = workspace:GetServerTimeNow()
 		local cameraPosition = camera.CFrame.Position
 
-		-- Calculate distances
+		-- Compute throttling values per conveyor every frame
+		-- Much cheaper than doing distance checks per bag
 		for _, conveyor in workspace.Conveyors:GetChildren() :: { Model } do
 			local root = conveyor.PrimaryPart
 			if not root then
@@ -193,16 +205,14 @@ do -- Bag rendering & throttling
 			conveyorsStep[tonumber(conveyor.Name)] = getStepFromDistance((cameraPosition - root.Position).Magnitude)
 		end
 
-		-- Loop through query
-		local bagEntitiesToDelete = {}
-
-		-- for bagEntity, model, startTime, finishTime, startPosition, finishPosition, conveyorId in getAllBags do
+		-- Main loop for processing every active bag
 		for bagEntity, finishTime in getAllBags do
 			local model = world:get(bagEntity, components.Model)
 			if not model.PrimaryPart then
 				continue
 			end
 
+			-- Progress is time based, so it's not bound to FPS
 			local startTime = world:get(bagEntity, components.StartedAt)
 			local elapsed, duration = serverTimeNow - startTime, finishTime - startTime
 			local progress = math.clamp(elapsed / duration, 0, 1)
@@ -211,12 +221,12 @@ do -- Bag rendering & throttling
 			-- ANIMATION
 			-------------------------------------------------------------------------------
 
+			-- Fade in at start & fade out at end, using a normalized value
 			local appearProgress = 1
+
 			if progress < ANIM_TRANSITION_WINDOW then
-				-- Fade in
 				appearProgress = progress / ANIM_TRANSITION_WINDOW
 			elseif progress > 1 - ANIM_TRANSITION_WINDOW then
-				-- Fade out
 				appearProgress = (1 - progress) / ANIM_TRANSITION_WINDOW
 			end
 
@@ -232,21 +242,26 @@ do -- Bag rendering & throttling
 			local finishPosition = world:get(bagEntity, components.FinishPosition)
 			local conveyorId = world:get(bagEntity, components.LinkedToId)
 
+			-- Lerp instead of Roblox physics to save performance
 			local position = startPosition:Lerp(finishPosition, progress)
 
+			-- CONTINUE: Bag has reached end & is marked for deletion
 			if progress >= 1 then
-				table.insert(bagEntitiesToDelete, bagEntity)
-				continue -- CONTINUE: Model is DONE FOR
+				world:add(bagEntity, Tags.ToDestroy)
+				continue
 			end
 
+			-- CONTINUE: Skip the frame if bag's conveyor is being throttled
 			if frames % conveyorsStep[conveyorId] ~= 0 then
-				continue -- CONTINUE: Throttled
+				continue
 			end
 
+			-- CONTINUE: Bag is outside of camera's view
 			if not ({ camera:WorldToViewportPoint(position) })[2] then
-				continue -- CONTINUE: Model is not in camera's FOV
+				continue
 			end
 
+			-- Insert into the bulkmoveto tables
 			table.insert(cframeList, model:GetPivot().Rotation + position)
 			table.insert(partsList, model.PrimaryPart)
 		end
@@ -255,16 +270,12 @@ do -- Bag rendering & throttling
 			workspace:BulkMoveTo(partsList, cframeList) -- Use BulkMoveTo because it's written in C++ -> more performant over manual CFrame operations.
 		end
 
-		-- Delete AFTER the loop, so we don't modify the world during the main iteration
-		if #bagEntitiesToDelete > 0 then
-			for _, bagEntity in next, bagEntitiesToDelete do
-				local model = world:get(bagEntity, components.Model)
-				if model then
-					model:Destroy()
-				end
-
-				world:delete(bagEntity)
+		-- Delete AFTER the loop, so we don't modify ECS during the main iteration
+		for bagEntity, model in getBagsToDestroy do
+			if model then
+				model:Destroy()
 			end
+			world:delete(bagEntity)
 		end
 	end)
 end

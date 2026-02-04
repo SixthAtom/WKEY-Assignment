@@ -32,6 +32,8 @@ local BAG_BYTE_SIZE = BYTE_SIZES.u16 * 2 + BYTE_SIZES.u8 + BYTE_SIZES.Color + BY
 local bagRemoteEvent = SimpleRemotes.getEvent("Bag")
 local bagRemoteFunction = SimpleRemotes.getFunction("Bag")
 
+-- Sequential ID avoids collisions and provides a lightweight way for clients
+-- to reference specific entities without passing 64-bit GUIDs
 local bagCounter = 0
 
 local world = Worlds.Default
@@ -41,7 +43,8 @@ local components = Components.Default
 -- PRIVATE FUNCTIONS
 -------------------------------------------------------------------------------
 
--- Method for encoding bag buffers -> following the DRY principle
+-- Encodes a bag buffer from a table
+-- Centralizing this prevents offset mistakes all over the code
 local function encodeBagBuffer(
 	b: buffer,
 	offset: number,
@@ -68,10 +71,14 @@ end
 -------------------------------------------------------------------------------
 
 function BagService.spawn(conveyorEntity: jecs.Entity)
+	-- Modulo wrap-around ensures the ID stays WELL within u16 bounds (0-65535)
+	-- preventing buffer overflow on the networking layer
 	bagCounter = (bagCounter % 50_000) + 1
 
 	local bagEntity = Bag.new(bagCounter, conveyorEntity)
 
+	-- Combining the remote code and data into one buffer reduces the number
+	-- of network calls when spawning
 	local b, offset = buffer.create(BYTE_SIZES.u8 + BAG_BYTE_SIZE), 0
 	offset = BufferUtil.writeu8(b, offset, REMOTE_CODES.Events.Spawn)
 	offset = encodeBagBuffer(b, offset, {
@@ -91,6 +98,7 @@ end
 -------------------------------------------------------------------------------
 
 do -- Listen for remotes
+	-- Caching ECS queries give a very big performance boost (about 5x as fast as non-cached)
 	local getAllBagIds = world:query(components.Id, Tags.IsBag):cached()
 	local getAllBags = world
 		:query(
@@ -121,13 +129,14 @@ do -- Listen for remotes
 
 	SimpleRemotesUtil.bindRemoteFunctionActions(bagRemoteFunction, {
 		[REMOTE_CODES.Functions.Get] = function(player: Player)
+			-- RETURN: Request is throttled, prevents CPU exhausting from malicious clients
 			if Limiter.isDebouncing(`GetBags.{player.UserId}`, 10) then
 				return
 			end
 
-			-- Collect all valid bags
 			local serverTimeNow, bagDataList = workspace:GetServerTimeNow(), {}
 			for _, id, materialId, color, conveyorId, startTime, finishTime in getAllBags do
+				-- RETURN: Expired bags are excluded to keep network traffic as low as possible
 				if serverTimeNow > finishTime then
 					continue
 				end
@@ -142,11 +151,11 @@ do -- Listen for remotes
 				})
 			end
 
-			-- Pre-alloc buffer
+			-- Calculating exact size beforehand avoids the memory cost of
+			-- repeatedly resizing or reallocating the buffer during the loop
 			local len = #bagDataList
 			local b, offset = buffer.create(BYTE_SIZES.u16 + len * BAG_BYTE_SIZE), 0
 
-			-- Fill buffer
 			offset = BufferUtil.writeu16(b, offset, len)
 			for i = 1, #bagDataList do
 				local v = bagDataList[i]
@@ -169,6 +178,9 @@ do -- Cleanup loop
 	local getBagsToDestroy = world:query(Tags.ToDestroy):with(Tags.IsBag):cached()
 	local getBagsFinishTime = world:query(components.FinishesAt):with(Tags.IsBag):cached()
 
+	-- A randomized cleanup interval spreads the CPU cost of entity deletion
+	-- across multiple frames instead of causing a single massive spike
+
 	local nextCleanup = 0
 	RunService.Heartbeat:Connect(function()
 		local timeNow = os.clock()
@@ -180,6 +192,9 @@ do -- Cleanup loop
 		-- Potentially tag entities
 		local serverTimeNow = workspace:GetServerTimeNow()
 		for bagEntity, finishTime in getBagsFinishTime do
+			-- We tag first then delete in a separate pass to ensure we aren't
+			-- modifying the query results while iterating over them
+
 			if serverTimeNow >= finishTime then
 				world:add(bagEntity, Tags.ToDestroy)
 			end
