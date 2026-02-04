@@ -126,8 +126,6 @@ local function spawnBagEntity(data: BagEntityData)
 	local material = Enum.Material:FromValue(data.MaterialId) :: Enum.Material
 	local bagEntity = Bag.new(data.Id, material, data.Color, data.ConveyorId, data.StartTime, data.FinishTime)
 
-	warn(`LID: {data.Id} | WEID: {bagEntity} | LEID: {jecs.ECS_ID(bagEntity)} | GID: {jecs.ECS_GENERATION(bagEntity)}`)
-
 	-- Interaction logic is attached at spawn so it dies with the entity
 	local bagModel = world:get(bagEntity, components.Model)
 
