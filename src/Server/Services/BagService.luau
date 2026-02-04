@@ -6,6 +6,7 @@ local ServerStorage = game:GetService("ServerStorage")
 
 local Components = require(ServerStorage.Server.ECS.Components)
 local BufferConstants = require(ReplicatedStorage.Shared.Constants.BufferConstants)
+local Tags = require(ReplicatedStorage.Shared.ECS.Tags)
 local Worlds = require(ReplicatedStorage.Shared.ECS.Worlds)
 local Limiter = require(ReplicatedStorage.Shared.Limiter)
 local RemoteCodes = require(ReplicatedStorage.Shared.Networking.RemoteCodes)
@@ -89,102 +90,106 @@ end
 -- LOGIC
 -------------------------------------------------------------------------------
 
--- Listen for remotes
-SimpleRemotesUtil.bindRemoteEventActions(bagRemoteEvent, {
-	[REMOTE_CODES.Events.Clicked] = function(player: Player, b: buffer)
-		local offset = 0
-		local bagId: number
-		bagId, offset = BufferUtil.readu16(b, offset)
+do -- Listen for remotes
+	local getAllBagIds = world:query(components.Id, Tags.IsBag):cached()
+	local getAllBags = world
+		:query(
+			components.Id,
+			components.MaterialId,
+			components.Color,
+			components.LinkedToId,
+			components.StartedAt,
+			components.FinishesAt,
+			Tags.IsBag
+		)
+		:cached()
 
-		for bagEntity, _bagId in world:query(components.Id):with(components.BagTag) do
-			if _bagId == bagId then
-				warn(`{player.Name} just clicked bag {bagId} | server EntityID: {bagEntity}`)
-				break
+	SimpleRemotesUtil.bindRemoteEventActions(bagRemoteEvent, {
+		[REMOTE_CODES.Events.Clicked] = function(player: Player, b: buffer)
+			local offset = 0
+			local bagId: number
+			bagId, offset = BufferUtil.readu16(b, offset)
+
+			for bagEntity, _bagId in getAllBagIds do
+				if _bagId == bagId then
+					warn(`{player.Name} just clicked bag {bagId} | server EntityID: {bagEntity}`)
+					break
+				end
 			end
-		end
-	end,
-}, SimpleRemotesUtil.DecodeActionBuffer)
+		end,
+	}, SimpleRemotesUtil.DecodeActionBuffer)
 
-SimpleRemotesUtil.bindRemoteFunctionActions(bagRemoteFunction, {
-	[REMOTE_CODES.Functions.Get] = function(player: Player)
-		if Limiter.isDebouncing(`GetBags.{player.UserId}`, 10) then
+	SimpleRemotesUtil.bindRemoteFunctionActions(bagRemoteFunction, {
+		[REMOTE_CODES.Functions.Get] = function(player: Player)
+			if Limiter.isDebouncing(`GetBags.{player.UserId}`, 10) then
+				return
+			end
+
+			-- Collect all valid bags
+			local serverTimeNow, bagDataList = workspace:GetServerTimeNow(), {}
+			for _, id, materialId, color, conveyorId, startTime, finishTime in getAllBags do
+				if serverTimeNow > finishTime then
+					continue
+				end
+
+				table.insert(bagDataList, 1, {
+					id,
+					materialId,
+					color,
+					conveyorId,
+					startTime,
+					finishTime,
+				})
+			end
+
+			-- Pre-alloc buffer
+			local len = #bagDataList
+			local b, offset = buffer.create(BYTE_SIZES.u16 + len * BAG_BYTE_SIZE), 0
+
+			-- Fill buffer
+			offset = BufferUtil.writeu16(b, offset, len)
+			for i = 1, #bagDataList do
+				local v = bagDataList[i]
+				offset = encodeBagBuffer(b, offset, {
+					Id = v[1],
+					MaterialId = v[2],
+					Color = v[3],
+					ConveyorId = v[4],
+					StartTime = v[5],
+					FinishTime = v[6],
+				})
+			end
+
+			return b
+		end,
+	}, SimpleRemotesUtil.DecodeActionBuffer)
+end
+
+do -- Cleanup loop
+	local getBagsToDestroy = world:query(Tags.ToDestroy):with(Tags.IsBag):cached()
+	local getBagsFinishTime = world:query(components.FinishesAt):with(Tags.IsBag):cached()
+
+	local nextCleanup = 0
+	RunService.Heartbeat:Connect(function()
+		local timeNow = os.clock()
+		if timeNow < nextCleanup then
 			return
 		end
+		nextCleanup = timeNow + math.random(10, 30) / 100
 
-		-- Query for all bags
-		local getAllBags = world
-			:query(
-				components.Id,
-				components.MaterialId,
-				components.Color,
-				components.LinkedToId,
-				components.StartedAt,
-				components.FinishesAt
-			)
-			:with(components.BagTag)
-
-		-- Collect all valid bags
+		-- Potentially tag entities
 		local serverTimeNow = workspace:GetServerTimeNow()
-
-		local bagDataList = {}
-		for _, id, materialId, color, conveyorId, startTime, finishTime in getAllBags do
-			if serverTimeNow > finishTime then
-				continue
+		for bagEntity, finishTime in getBagsFinishTime do
+			if serverTimeNow >= finishTime then
+				world:add(bagEntity, Tags.ToDestroy)
 			end
-
-			table.insert(bagDataList, {
-				id,
-				materialId,
-				color,
-				conveyorId,
-				startTime,
-				finishTime,
-			})
 		end
 
-		-- Pre-alloc buffer
-		local len = #bagDataList
-		local b, offset = buffer.create(BYTE_SIZES.u16 + len * BAG_BYTE_SIZE), 0
-
-		-- Fill buffer
-		offset = BufferUtil.writeu16(b, offset, len)
-		for i = 1, #bagDataList do
-			local v = bagDataList[i]
-			offset = encodeBagBuffer(b, offset, {
-				Id = v[1],
-				MaterialId = v[2],
-				Color = v[3],
-				ConveyorId = v[4],
-				StartTime = v[5],
-				FinishTime = v[6],
-			})
+		-- Cleanup entities
+		for bagEntity in getBagsToDestroy do
+			world:delete(bagEntity)
 		end
-
-		return b
-	end,
-}, SimpleRemotesUtil.DecodeActionBuffer)
-
--- Clean up the world
-local nextCleanup = 0
-RunService.Heartbeat:Connect(function()
-	local timeNow = os.clock()
-	if timeNow < nextCleanup then
-		return
-	end
-	nextCleanup = timeNow + math.random(10, 30) / 100
-
-	local serverTimeNow = workspace:GetServerTimeNow()
-	local bagsToDelete = {}
-
-	for bagEntity, finishTime in world:query(components.FinishesAt):with(components.BagTag) do
-		if serverTimeNow >= finishTime then
-			table.insert(bagsToDelete, bagEntity)
-		end
-	end
-
-	for _, bagEntity in bagsToDelete do
-		world:delete(bagEntity)
-	end
-end)
+	end)
+end
 
 return BagService

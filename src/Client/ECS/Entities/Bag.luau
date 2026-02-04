@@ -3,6 +3,7 @@ local Bag = {}
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Components = require(ReplicatedStorage.Client.ECS.Components)
+local Tags = require(ReplicatedStorage.Shared.ECS.Tags)
 local Worlds = require(ReplicatedStorage.Shared.ECS.Worlds)
 local ECSUtil = require(ReplicatedStorage.Shared.Util.ECSUtil)
 local ModelUtil = require(ReplicatedStorage.Shared.Util.ModelUtil)
@@ -41,9 +42,11 @@ function Bag.new(
 	-------------------------------------------------------------------------------
 
 	-- Prepare model
+	workspace.BagTemplate:WaitForChild("MeshPart")
 	local bagModel = workspace.BagTemplate:Clone()
 	local boundingSize = ModelUtil.getBoundingSize(bagModel)
 	bagModel.Name = tostring(bagEntity)
+	bagModel:SetAttribute("Id", id)
 
 	bagModel.Parent = workspace.Terrain
 	for _, v in next, bagModel:QueryDescendants("BasePart") :: { BasePart } do
@@ -74,7 +77,7 @@ function Bag.new(
 		[components.LinkedToId] = conveyorId,
 	})
 
-	world:add(bagEntity, components.BagTag)
+	world:add(bagEntity, Tags.IsBag)
 
 	return bagEntity
 end

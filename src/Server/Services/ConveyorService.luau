@@ -6,6 +6,7 @@ local RunService = game:GetService("RunService")
 local ServerStorage = game:GetService("ServerStorage")
 
 local ConveyorConstants = require(ReplicatedStorage.Shared.Constants.ConveyorConstants)
+local Tags = require(ReplicatedStorage.Shared.ECS.Tags)
 local Components = require(ServerStorage.Server.ECS.Components)
 local Worlds = require(ReplicatedStorage.Shared.ECS.Worlds)
 local RemoteCodes = require(ReplicatedStorage.Shared.Networking.RemoteCodes)
@@ -24,7 +25,7 @@ local REMOTE_CODES = RemoteCodes.Conveyor
 local INTERVAL_RATES = ConveyorConstants.IntervalRates
 
 local DEFAULT_SPAWN_INTERVAL = 1
-local DEFAULT_CONVEYOR_SPEED = 5
+local DEFAULT_CONVEYOR_SPEED = 10
 
 -------------------------------------------------------------------------------
 -- PRIVATE VARIABLES
@@ -71,7 +72,7 @@ function ConveyorService.setInterval(newInterval: number)
 
 	warn(`Set interval to {newInterval}`)
 
-	for conveyorEntity in world:query(components.ConveyorTag) do
+	for conveyorEntity in world:query(Tags.IsConveyor) do
 		world:set(conveyorEntity, components.Interval, newInterval)
 	end
 end
@@ -103,20 +104,21 @@ end
 -- LOGIC
 -------------------------------------------------------------------------------
 
--- Conveyor spawn detection
-RunService.Heartbeat:Connect(function()
-	local getConveyors = world:query(components.NextSpawnAt, components.Interval):with(components.ConveyorTag)
+do -- Conveyor spawn detection
+	local getConveyors = world:query(components.NextSpawnAt, components.Interval, Tags.IsConveyor):cached()
 
-	local timeNow = os.clock()
-	for conveyorEntity, nextSpawnAt, spawnInterval in getConveyors do
-		if timeNow < nextSpawnAt then
-			continue -- CONTINUE: Not yet refreshing
+	RunService.Heartbeat:Connect(function()
+		local timeNow = os.clock()
+		for conveyorEntity, nextSpawnAt, spawnInterval in getConveyors do
+			if timeNow < nextSpawnAt then
+				continue -- CONTINUE: Not yet refreshing
+			end
+
+			world:set(conveyorEntity, components.NextSpawnAt, timeNow + spawnInterval)
+			BagService.spawn(conveyorEntity)
 		end
-
-		world:set(conveyorEntity, components.NextSpawnAt, timeNow + spawnInterval)
-		BagService.spawn(conveyorEntity)
-	end
-end)
+	end)
+end
 
 -- Listen for remotes
 SimpleRemotesUtil.bindRemoteEventActions(conveyorRemoteEvent, {

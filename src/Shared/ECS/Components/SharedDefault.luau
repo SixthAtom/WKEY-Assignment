@@ -20,11 +20,6 @@ local world = Worlds.Default
 -------------------------------------------------------------------------------
 
 return {
-	-- Tags
-	ConveyorTag = jecs.tag(),
-	BagTag = jecs.tag(),
-
-	-- Globals
 	Name = world:component() :: Id<string>,
 	Id = world:component() :: Id<number>,
 	OwnerId = world:component() :: Id<number>,

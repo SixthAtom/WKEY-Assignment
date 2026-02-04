@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 
 local MaterialConstants = require(ReplicatedStorage.Shared.Constants.MaterialConstants)
+local Tags = require(ReplicatedStorage.Shared.ECS.Tags)
 local Components = require(ServerStorage.Server.ECS.Components)
 local Worlds = require(ReplicatedStorage.Shared.ECS.Worlds)
 local jecs = require(ReplicatedStorage.Shared.Packages.jecs)
@@ -53,7 +54,7 @@ function Bag.new(id: number, conveyorEntity: jecs.Entity)
 		[components.FinishesAt] = serverTimeNow + conveyorLength / conveyorSpeed,
 	})
 
-	world:add(bagEntity, components.BagTag)
+	world:add(bagEntity, Tags.IsBag)
 
 	return bagEntity
 end

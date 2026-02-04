@@ -3,6 +3,7 @@ local Conveyor = {}
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 
+local Tags = require(ReplicatedStorage.Shared.ECS.Tags)
 local Components = require(ServerStorage.Server.ECS.Components)
 local Worlds = require(ReplicatedStorage.Shared.ECS.Worlds)
 local ECSUtil = require(ReplicatedStorage.Shared.Util.ECSUtil)
@@ -33,7 +34,7 @@ function Conveyor.new(id: number, model: Model, spawnInterval: number, speed: nu
 		[components.NextSpawnAt] = 0,
 	})
 
-	world:add(conveyorEntity, components.ConveyorTag)
+	world:add(conveyorEntity, Tags.IsConveyor)
 
 	return conveyorEntity
 end
