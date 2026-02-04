@@ -32,6 +32,8 @@ type BagEntityData = {
 local REMOTE_CODES = RemoteCodes.Bags
 local BYTE_SIZES = BufferConstants.Sizes
 
+local ANIM_TRANSITION_WINDOW = 0.05
+
 local DISTANCE_STEPS = {
 	[100] = 3,
 	[200] = 5,
@@ -180,10 +182,31 @@ RunService.RenderStepped:Connect(function()
 
 		local elapsed, duration = serverTimeNow - startTime, finishTime - startTime
 		local progress = math.clamp(elapsed / duration, 0, 1)
+
+		-------------------------------------------------------------------------------
+		-- ANIMATION
+		-------------------------------------------------------------------------------
+
+		local appearProgress = 1
+		if progress < ANIM_TRANSITION_WINDOW then
+			-- Fade in
+			appearProgress = progress / ANIM_TRANSITION_WINDOW
+		elseif progress > 1 - ANIM_TRANSITION_WINDOW then
+			-- Fade out
+			appearProgress = (1 - progress) / ANIM_TRANSITION_WINDOW
+		end
+
+		for _, v in model:QueryDescendants("BasePart") :: { BasePart } do
+			v.Transparency = 1 - appearProgress
+		end
+
+		-------------------------------------------------------------------------------
+		-- RENDERING
+		-------------------------------------------------------------------------------
+
 		local position = startPosition:Lerp(finishPosition, progress)
 
 		if progress >= 1 then
-			model:Destroy()
 			table.insert(bagEntitiesToDelete, bagEntity)
 			continue -- CONTINUE: Model is DONE FOR
 		end
@@ -204,8 +227,17 @@ RunService.RenderStepped:Connect(function()
 		workspace:BulkMoveTo(partsList, cframeList) -- Use BulkMoveTo because it's written in C++ -> more performant over manual CFrame operations.
 	end
 
-	for _, bagEntity in next, bagEntitiesToDelete do
-		world:delete(bagEntity)
+	-- Delete AFTER the loop -> Important when using JECS.
+	if #bagEntitiesToDelete > 0 then
+		for _, bagEntity in next, bagEntitiesToDelete do
+			local model = world:get(bagEntity, components.Model)
+
+			world:delete(bagEntity)
+
+			if model then
+				model:Destroy()
+			end
+		end
 	end
 end)
 

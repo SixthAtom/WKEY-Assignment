@@ -43,6 +43,7 @@ function Bag.new(
 	-- Prepare model
 	local bagModel = workspace.BagTemplate:Clone()
 	local boundingSize = ModelUtil.getBoundingSize(bagModel)
+	bagModel.Name = tostring(bagEntity)
 
 	bagModel.Parent = workspace.Terrain
 	for _, v in next, bagModel:QueryDescendants("BasePart") :: { BasePart } do
